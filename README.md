@@ -105,3 +105,134 @@ fetch('http://localhost:8000/time')
   .then(response => response.json())
   .then(data => console.log(data));
 ```
+
+## 🐳 Docker
+
+### Запуск через Docker
+
+```bash
+# Сборка образа
+docker build -t time-server .
+
+# Запуск контейнера
+docker run -d -p 8000:8000 --name time-server time-server
+
+# Просмотр логов
+docker logs time-server
+
+# Остановка контейнера
+docker stop time-server
+```
+
+### Запуск через Docker Compose
+
+```bash
+# Запуск
+docker-compose up -d
+
+# Остановка
+docker-compose down
+
+# Просмотр логов
+docker-compose logs -f
+```
+
+### Тестирование Docker локально
+
+```bash
+# Linux/macOS
+./scripts/test-docker.sh
+
+# Windows PowerShell
+.\scripts\test-docker.ps1
+```
+
+## 🚀 CI/CD и автоматический деплой
+
+Проект настроен для автоматического деплоя через **GitHub Actions**.
+
+### Как это работает:
+
+1. **При пуше в `main`** или создании тега:
+   - Автоматически собирается Docker образ
+   - Образ публикуется в GitHub Container Registry (GHCR)
+   - Через SSH подключается к вашему серверу
+   - Скачивает новый образ и запускает его
+
+### Быстрый старт:
+
+1. **Настройте секреты** в GitHub (Settings → Secrets):
+   - `SSH_HOST` - IP адрес вашего сервера
+   - `SSH_USERNAME` - имя пользователя SSH
+   - `SSH_PRIVATE_KEY` - приватный SSH ключ
+   - `SSH_PORT` - порт SSH (опционально, по умолчанию 22)
+
+2. **Запушьте код**:
+   ```bash
+   git add .
+   git commit -m "Deploy to production"
+   git push origin main
+   ```
+
+3. **Готово!** GitHub Actions автоматически развернет приложение на вашем сервере.
+
+### Документация по деплою:
+
+- 📖 [Подробная инструкция по настройке](.github/DEPLOYMENT_SETUP.md)
+- 📋 [Полезные команды](COMMANDS.md)
+- 🔧 [Описание workflows](.github/README.md)
+
+### Доступные workflows:
+
+- **deploy.yml** - простой деплой через Docker команды (рекомендуется для начала)
+- **deploy-compose.yml** - продвинутый деплой через Docker Compose
+
+## 📊 Мониторинг
+
+После деплоя проверьте работу приложения:
+
+```bash
+# На сервере
+curl http://localhost:8000/health
+curl http://localhost:8000/time
+
+# Или откройте в браузере
+# http://your-server-ip:8000/docs
+```
+
+## 📝 Разработка
+
+### Структура проекта
+
+```
+Actions/
+├── .github/
+│   ├── workflows/
+│   │   ├── deploy.yml              # Простой CI/CD workflow
+│   │   └── deploy-compose.yml      # Продвинутый CI/CD workflow
+│   ├── DEPLOYMENT_SETUP.md         # Инструкция по настройке
+│   └── README.md                   # Описание workflows
+├── scripts/
+│   ├── test-docker.sh              # Тест Docker (bash)
+│   └── test-docker.ps1             # Тест Docker (PowerShell)
+├── main.py                         # Основной код приложения
+├── Dockerfile                      # Конфигурация Docker образа
+├── docker-compose.yml              # Docker Compose конфигурация
+├── requirements.txt                # Python зависимости
+├── COMMANDS.md                     # Полезные команды
+└── README.md                       # Этот файл
+```
+
+## 🤝 Контрибьюция
+
+Если вы хотите внести изменения:
+
+1. Форкните репозиторий
+2. Создайте ветку: `git checkout -b feature/amazing-feature`
+3. Закоммитьте изменения: `git commit -m 'Add amazing feature'`
+4. Запушьте ветку: `git push origin feature/amazing-feature`
+5. Откройте Pull Request
+
+## 📄 Лицензия
+
+MIT License

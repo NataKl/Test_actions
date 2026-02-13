@@ -44,3 +44,18 @@ Thumbs.db
 *.db
 *.sqlite
 .env
+
+# SSH Keys (не коммитить приватные ключи!)
+github_ssh
+github_ssh.pub
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/

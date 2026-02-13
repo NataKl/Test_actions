@@ -1,0 +1,146 @@
+name: Build and Deploy
+
+# Запуск workflow при пуше в main или при создании тега
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch: # Возможность запуска вручную
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ============================================
+  # ДЖОБА 1: Сборка и публикация Docker образа
+  # ============================================
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    
+    # Необходимые разрешения для работы с GHCR
+    permissions:
+      contents: read
+      packages: write
+    
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+      # Шаг 1: Клонируем репозиторий
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # Шаг 2: Настройка Docker Buildx (для продвинутой сборки)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      # Шаг 3: Логин в GitHub Container Registry
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      # Шаг 4: Извлекаем метаданные для Docker (теги, лейблы)
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Использовать тег из Git (если есть)
+            type=ref,event=tag
+            # Использовать sha коммита
+            type=sha,prefix={{branch}}-,format=short
+            # Добавить тег latest для main/master ветки
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      # Шаг 5: Собираем и пушим Docker образ
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      # Шаг 6: Выводим информацию о собранном образе
+      - name: Image digest
+        run: |
+          echo "Image digest: ${{ steps.build.outputs.digest }}"
+          echo "Image tags: ${{ steps.meta.outputs.tags }}"
+
+  # ============================================
+  # ДЖОБА 2: Деплой на удаленный сервер через SSH
+  # ============================================
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: build-and-push # Ждем завершения первой джобы
+    
+    steps:
+      # Шаг 1: Деплой через SSH
+      - name: Deploy to remote server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }} # По умолчанию порт 22
+          script: |
+            # Переходим в рабочую директорию (опционально)
+            cd ~
+            
+            # Логинимся в GitHub Container Registry
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+            
+            # Останавливаем и удаляем старый контейнер (если существует)
+            docker stop time-server-app || true
+            docker rm time-server-app || true
+            
+            # Удаляем старый образ (опционально, для освобождения места)
+            docker rmi ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest || true
+            
+            # Скачиваем новый образ из реестра
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            
+            # Запускаем новый контейнер
+            docker run -d \
+              --name time-server-app \
+              --restart unless-stopped \
+              -p 8000:8000 \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            
+            # Проверяем статус контейнера
+            docker ps | grep time-server-app
+            
+            # Очищаем неиспользуемые образы (опционально)
+            docker image prune -f
+      
+      # Шаг 2: Проверка health endpoint (опционально)
+      - name: Check application health
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            # Ждем 10 секунд чтобы приложение запустилось
+            sleep 10
+            
+            # Проверяем health endpoint
+            curl -f http://localhost:8000/health || exit 1
+            
+            echo "✅ Deployment successful! Application is healthy."
