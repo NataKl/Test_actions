@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  time-server:
+    image: ghcr.io/${GITHUB_REPOSITORY:-username/repository}:latest
+    container_name: time-server-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Добавьте здесь необходимые переменные окружения
+      - TZ=Europe/Moscow
+    # Опционально: монтирование логов
+    # volumes:
+    #   - ./logs:/app/logs
+    # Опционально: лимиты ресурсов
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
